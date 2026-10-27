@@ -1,0 +1,453 @@
+<title>Motor Health Node</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: status hero + health ring on top, four gauges, alert channel + kit config, history, connect bar */
+:root{
+  --bg:#06131a; --bg2:#0a1c25; --card:#0d202a; --card2:#112833; --line:#1b3743;
+  --text:#e8f3f1; --muted:#8aa5ad; --track:#183541; --glow:#123f45;
+  --accent:#c9f36a; --on-accent:#10210a; --teal:#3fd8c0;
+  --ok:#5fd68a; --warn:#f2aa3c; --crit:#ff6258;
+  --display:'Barlow Condensed','Arial Narrow',sans-serif;
+  --body:'Figtree',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#edf4f2; --bg2:#e3eeeb; --card:#ffffff; --card2:#f2f8f6; --line:#d2e0dc;
+    --text:#10252c; --muted:#58707a; --track:#dbe8e5; --glow:#cfe9e2;
+    --accent:#1f7a55; --on-accent:#ffffff; --teal:#0d9a86;
+    --ok:#1f8a4c; --warn:#b36b00; --crit:#c62f26;
+    color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#edf4f2; --bg2:#e3eeeb; --card:#ffffff; --card2:#f2f8f6; --line:#d2e0dc;
+  --text:#10252c; --muted:#58707a; --track:#dbe8e5; --glow:#cfe9e2;
+  --accent:#1f7a55; --on-accent:#ffffff; --teal:#0d9a86;
+  --ok:#1f8a4c; --warn:#b36b00; --crit:#c62f26;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg);
+  background-image:radial-gradient(760px 360px at 88% -60px,var(--glow),transparent 70%);
+  color:var(--text); font:15px/1.5 var(--body);
+  padding-block:20px 44px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.wrap{max-width:1080px;margin:0 auto;display:grid;gap:14px}
+h1,h2,h3,p{margin:0}
+.lbl{font:500 11px/1.2 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;min-width:0}
+
+/* header */
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.mark{width:42px;height:42px;border-radius:12px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;flex:none}
+.brand h1{font:600 26px/1 var(--display);letter-spacing:.01em}
+.pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{font:500 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;padding:8px 12px;border-radius:99px;border:1px solid var(--line);color:var(--muted);display:inline-flex;align-items:center;gap:7px}
+.pill i{width:7px;height:7px;border-radius:50%;background:var(--muted);display:block}
+.pill.on{color:var(--ok)} .pill.on i{background:var(--ok)}
+.pill.off{color:var(--crit)} .pill.off i{background:var(--crit)}
+.pill.demo{color:var(--warn)} .pill.demo i{background:var(--warn)}
+
+/* top row */
+.top{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}
+.hero{display:flex;flex-direction:column;gap:14px;justify-content:space-between;min-height:250px}
+.status{font:600 clamp(46px,10vw,84px)/.92 var(--display);text-transform:uppercase;letter-spacing:.005em}
+.lv-ok .status{color:var(--ok)} .lv-warn .status{color:var(--warn)} .lv-crit .status{color:var(--crit)} .lv-na .status{color:var(--text)}
+.hero p.sub{color:var(--muted);max-width:46ch}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font:500 12px/1 var(--body);padding:8px 11px;border-radius:99px;border:1px solid var(--line);background:var(--card2)}
+.chip.c{color:var(--crit);border-color:var(--crit)} .chip.w{color:var(--warn);border-color:var(--warn)} .chip.k{color:var(--ok);border-color:var(--ok)}
+.hgauge{display:flex;flex-direction:column;gap:6px}
+.hgauge .gauge{width:100%;max-width:360px;margin:auto}
+
+/* gauges */
+.gauges{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.gcard{padding:14px;display:flex;flex-direction:column;gap:6px}
+.gh{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.gh h3{font:500 13px/1.2 var(--body)}
+.zone{font:500 10px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;padding:5px 8px;border-radius:99px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.z-ok .zone{color:var(--ok);border-color:var(--ok)} .z-warn .zone{color:var(--warn);border-color:var(--warn)} .z-crit .zone{color:var(--crit);border-color:var(--crit)}
+.gauge{display:block;width:100%;height:auto}
+.track{fill:none;stroke:var(--track);stroke-width:12;stroke-linecap:round}
+.fillarc{fill:none;stroke-width:12;stroke-linecap:round;stroke:var(--teal);transition:stroke-dasharray .6s ease}
+.z-warn .fillarc{stroke:var(--warn)} .z-crit .fillarc{stroke:var(--crit)} .z-na .fillarc{opacity:0}
+.mk{stroke:var(--muted);stroke-width:2} .mk.w{stroke:var(--warn)} .mk.c{stroke:var(--crit)}
+.gv{font:600 38px var(--display);fill:var(--text)} .z-warn .gv{fill:var(--warn)} .z-crit .gv{fill:var(--crit)}
+.gu{font:500 11px var(--mono);fill:var(--muted);letter-spacing:.08em}
+.gm{font:400 10px var(--mono);fill:var(--muted)}
+.lim{font:400 11.5px/1.4 var(--body);color:var(--muted)}
+
+/* two column info */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.card h2{font:600 17px/1.2 var(--body);margin-bottom:10px}
+.row{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row span:first-child{color:var(--muted)} .row span:last-child{font-weight:500;text-align:right}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:11px 12px;display:grid;gap:4px;min-width:0}
+.tile b{font-weight:500;font-size:14px;line-height:1.3}
+
+/* history */
+.hist-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{font:500 12px/1 var(--body);padding:9px 12px;border-radius:99px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.tab:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+#chart{width:100%;height:auto;display:block}
+.gl{stroke:var(--line);stroke-width:1} .gt{font:400 14px var(--mono);fill:var(--muted)}
+.th{stroke-width:1.2;stroke-dasharray:5 5} .th.w{stroke:var(--warn)} .th.c{stroke:var(--crit)}
+.ln{fill:none;stroke:var(--teal);stroke-width:2.4;stroke-linejoin:round} .area{fill:var(--teal);fill-opacity:.12} .dot{fill:var(--accent)}
+.cap{font:400 12px var(--body);color:var(--muted);margin-top:4px}
+
+/* connect */
+.conn{display:grid;grid-template-columns:1fr 1.5fr;gap:16px;align-items:center}
+.conn p.s{color:var(--muted);font-size:13px;margin-top:3px}
+.form{display:flex;gap:8px;flex-wrap:wrap}
+input,select{font:400 14px var(--body);background:var(--bg2);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+input{flex:1 1 200px} select{flex:0 1 150px}
+button.btn{font:600 14px var(--body);background:var(--accent);color:var(--on-accent);border:0;border-radius:12px;padding:12px 20px;cursor:pointer}
+button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center}
+.msg{font-size:13px;margin-top:8px;color:var(--muted);min-height:1.2em}
+.msg.err{color:var(--crit)}
+.note{font-size:12px;color:var(--muted);text-align:center}
+
+@media (max-width:900px){.gauges{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:760px){.top,.two,.conn{grid-template-columns:1fr}.hero{min-height:0}}
+@media (max-width:420px){.tiles{grid-template-columns:1fr}.card{padding:15px}}
+@media (prefers-reduced-motion:reduce){.fillarc{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="mark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></div>
+      <div><div class="lbl">Smart motor · health monitor</div><h1>Motor Health Node</h1></div>
+    </div>
+    <div class="pills"><span class="pill">ESP32 / Node 01</span><span class="pill demo" id="conn"><i></i><b id="connT" style="font-weight:500">Demo data</b></span></div>
+  </header>
+
+  <section class="top">
+    <article class="card hero lv-na" id="hero">
+      <div class="lbl">Live motor condition</div>
+      <div><div class="lbl" style="margin-bottom:8px">Current status</div><div class="status" id="status">Waiting</div></div>
+      <p class="sub" id="sub">Connect your Blynk device to see the live motor status.</p>
+      <div class="chips" id="chips"></div>
+    </article>
+    <article class="card hgauge z-na" id="c-health">
+      <div class="gh"><h3>Health score</h3><span class="zone" id="z-health">No data</span></div>
+      <div id="g-health"></div>
+      <p class="lim">Starts at 100. Warning limits take 15 points, trip limits 35, a missing sensor 5.</p>
+    </article>
+  </section>
+
+  <section class="gauges" id="gauges"></section>
+
+  <section class="two">
+    <article class="card">
+      <h2>Alert channel</h2>
+      <div class="row"><span>ESP32 / Wi-Fi</span><span id="r-esp">Waiting</span></div>
+      <div class="row"><span>Blynk cloud</span><span id="r-cloud">Waiting</span></div>
+      <div class="row"><span>Alert status</span><span id="r-alert">None</span></div>
+      <div class="row"><span>Buzzer signal</span><span id="r-buzz">Silent</span></div>
+      <div class="row"><span>Protection relay</span><span id="r-relay">Armed</span></div>
+    </article>
+    <article class="card">
+      <h2>Your kit configuration</h2>
+      <div class="tiles">
+        <div class="tile"><span class="lbl">Controller</span><b>ESP32 DevKit, 38 pin</b></div>
+        <div class="tile"><span class="lbl">Motor</span><b>555 DC motor, 12 V</b></div>
+        <div class="tile"><span class="lbl">Sensors</span><b>DS18B20 · MPU-6050 · ACS712 5 A · 0–25 V module</b></div>
+        <div class="tile"><span class="lbl">Relay / buzzer</span><b>GPIO 23 · GPIO 25</b></div>
+        <div class="tile"><span class="lbl">Current rule</span><b>Up to 5 A normal, trip at 6 A</b></div>
+        <div class="tile"><span class="lbl">Trip limits</span><b>65 °C · 0.60 g · under 9.5 V or over 14.5 V</b></div>
+      </div>
+    </article>
+  </section>
+
+  <section class="card">
+    <div class="hist-top">
+      <div><h2 style="margin:0">Reading history</h2><p class="cap" id="histCap">Waiting for readings</p></div>
+      <div class="tabs" role="tablist" id="tabs"></div>
+    </div>
+    <svg id="chart" viewBox="0 0 640 240" role="img" aria-label="History of the selected reading"></svg>
+    <p class="cap">Dashed lines mark the warning (amber) and trip (red) limits.</p>
+  </section>
+
+  <section class="card conn">
+    <div>
+      <h2 style="margin:0">Connect Blynk device</h2>
+      <p class="s">Paste the device auth token. It stays in this browser tab only. Readings refresh every 5 seconds, and the board sends new values about once a minute to save Blynk credit.</p>
+    </div>
+    <div>
+      <div class="form">
+        <input id="tok" type="password" autocomplete="off" placeholder="Device auth token" aria-label="Device auth token">
+        <select id="srv" aria-label="Blynk server">
+          <option value="blynk.cloud">blynk.cloud</option>
+          <option value="sgp1.blynk.cloud">sgp1 (Singapore)</option>
+          <option value="blr1.blynk.cloud">blr1 (Bangalore)</option>
+          <option value="fra1.blynk.cloud">fra1 (Frankfurt)</option>
+          <option value="lon1.blynk.cloud">lon1 (London)</option>
+          <option value="ny3.blynk.cloud">ny3 (New York)</option>
+        </select>
+        <button class="btn" id="go" type="button">Connect</button>
+      </div>
+      <div class="seg" id="demoBar">
+        <span class="lbl">Demo</span>
+        <button class="tab" type="button" data-sc="normal" aria-pressed="true">Normal</button>
+        <button class="tab" type="button" data-sc="warning" aria-pressed="false">Warning</button>
+        <button class="tab" type="button" data-sc="critical" aria-pressed="false">Critical</button>
+        <button class="tab" type="button" id="demoBtn" hidden>Back to demo</button>
+      </div>
+      <p class="msg" id="msg" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <p class="note">Limits shown match the board firmware. Readings are shown as the board last reported them.</p>
+</div>
+
+<script>
+(function(){
+  var $=function(s){return document.querySelector(s)};
+  var CAP=120;
+
+  /* readings: limits are the same numbers used in the ESP32 code */
+  var CH={
+    temp:{label:'Temperature',unit:'°C',min:0,max:100,d:1,lines:[[50,'w'],[65,'c']],lim:'Warning 50 °C · trip 65 °C'},
+    cur:{label:'Motor current',unit:'A',min:0,max:10,d:2,lines:[[5,'w'],[6,'c']],lim:'Normal up to 5 A · warning above · trip 6 A'},
+    volt:{label:'Supply voltage',unit:'V',min:0,max:20,d:1,lines:[[9.5,'c'],[10.5,'w'],[13.5,'w'],[14.5,'c']],lim:'Normal 10.5–13.5 V · trip under 9.5 or over 14.5'},
+    vib:{label:'Vibration',unit:'g',min:0,max:1,d:2,lines:[[0.3,'w'],[0.6,'c']],lim:'Warning 0.30 g · trip 0.60 g'},
+    health:{label:'Health score',unit:'%',min:0,max:100,d:0,lines:[[50,'c'],[80,'w']],lim:''}
+  };
+  var ORDER=['temp','cur','volt','vib'];
+  var HIST_ORDER=['temp','cur','volt','vib','health'];
+  var ZT={ok:'Normal',warn:'Warning',crit:'Trip',na:'No data'};
+  var FM={TEMP:'Over-temperature',CURR:'Over-current',VOLT:'Voltage out of range',VIB:'High vibration',TSEN:'Temp sensor missing',MPU:'Vibration sensor missing',ISEN:'Current sensor missing',VSEN:'Voltage sensor missing'};
+  var SUB={
+    NORMAL:'All readings are inside their limits.',
+    WARNING:'A reading is above its warning limit. Check the motor.',
+    CRITICAL:'A reading crossed its trip limit. The relay cuts the motor after three confirmations.',
+    TRIPPED:'The relay is open and the motor is stopped. Reset the fault from Blynk or restart the board.',
+    'SENSOR ERR':'A sensor is not reporting. The motor keeps running on the remaining sensors.',
+    WAITING:'Connect your Blynk device to see the live motor status.'
+  };
+
+  var S={mode:'demo',scn:'normal',temp:null,cur:null,volt:null,vib:null,health:null,status:'WAITING',fault:'',cloud:null,esp:null,updated:null,tok:'',srv:'blynk.cloud'};
+  var H={temp:[],cur:[],volt:[],vib:[],health:[]};
+  var curTab='temp', pollT=null, demoT=null;
+
+  function zoneOf(id,v){
+    if(v==null||isNaN(v))return 'na';
+    if(id==='temp')return v>=65?'crit':v>=50?'warn':'ok';
+    if(id==='cur')return v>=6?'crit':v>5?'warn':'ok';
+    if(id==='volt'){if(v<1)return 'na';return(v<9.5||v>14.5)?'crit':(v<10.5||v>13.5)?'warn':'ok';}
+    if(id==='vib')return v>=0.6?'crit':v>=0.3?'warn':'ok';
+    if(id==='health')return v<50?'crit':v<80?'warn':'ok';
+    return 'na';
+  }
+
+  function gaugeSVG(id){
+    var c=CH[id],cx=100,cy=100,t='';
+    c.lines.forEach(function(l){
+      var f=(l[0]-c.min)/(c.max-c.min),a=Math.PI*(1-f);
+      var x1=cx+Math.cos(a)*90,y1=cy-Math.sin(a)*90,x2=cx+Math.cos(a)*99,y2=cy-Math.sin(a)*99;
+      t+='<line class="mk '+l[1]+'" x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'"/>';
+    });
+    return '<svg viewBox="0 0 200 122" class="gauge" role="img" aria-label="'+c.label+'">'+
+      '<path class="track" pathLength="100" d="M20 100 A80 80 0 0 1 180 100"/>'+
+      '<path class="fillarc" id="f-'+id+'" pathLength="100" stroke-dasharray="0 100" d="M20 100 A80 80 0 0 1 180 100"/>'+t+
+      '<text class="gv" id="v-'+id+'" x="100" y="92" text-anchor="middle">--</text>'+
+      '<text class="gu" x="100" y="110" text-anchor="middle">'+c.unit+'</text>'+
+      '<text class="gm" x="20" y="118" text-anchor="middle">'+c.min+'</text>'+
+      '<text class="gm" x="180" y="118" text-anchor="middle">'+c.max+'</text></svg>';
+  }
+
+  function build(){
+    var g='';
+    ORDER.forEach(function(id){
+      g+='<article class="card gcard z-na" id="c-'+id+'"><div class="gh"><h3>'+CH[id].label+'</h3><span class="zone" id="z-'+id+'">No data</span></div>'+gaugeSVG(id)+'<p class="lim">'+CH[id].lim+'</p></article>';
+    });
+    $('#gauges').innerHTML=g;
+    $('#g-health').innerHTML=gaugeSVG('health');
+    var tb='';
+    HIST_ORDER.forEach(function(id){tb+='<button class="tab" role="tab" type="button" data-k="'+id+'" aria-selected="'+(id===curTab)+'">'+{temp:'Temperature',cur:'Current',volt:'Voltage',vib:'Vibration',health:'Health'}[id]+'</button>';});
+    $('#tabs').innerHTML=tb;
+  }
+
+  function setGauge(id){
+    var c=CH[id],v=S[id],z=zoneOf(id,v),el=$('#c-'+id);
+    el.classList.remove('z-ok','z-warn','z-crit','z-na');el.classList.add('z-'+z);
+    var f=(v==null||isNaN(v))?0:Math.max(0,Math.min(1,(v-c.min)/(c.max-c.min)));
+    $('#f-'+id).setAttribute('stroke-dasharray',(f*100).toFixed(1)+' 100');
+    $('#v-'+id).textContent=z==='na'?'--':v.toFixed(c.d);
+    $('#z-'+id).textContent=(id==='volt'&&z==='na'&&v!=null)?'Sensor off':ZT[z];
+  }
+
+  function lvOf(st){
+    if(st==='NORMAL')return 'ok';
+    if(st==='WARNING'||st==='SENSOR ERR')return 'warn';
+    if(st==='CRITICAL'||st==='TRIPPED')return 'crit';
+    return 'na';
+  }
+
+  function render(){
+    ORDER.concat(['health']).forEach(setGauge);
+    var st=S.status,lv=lvOf(st),h=$('#hero');
+    h.classList.remove('lv-ok','lv-warn','lv-crit','lv-na');h.classList.add('lv-'+lv);
+    $('#status').textContent=st==='WAITING'?'Waiting':st;
+    $('#sub').textContent=SUB[st]||'';
+    var chips='',toks=(S.fault||'').split(/\s+/).filter(function(x){return x&&x!=='NORMAL'});
+    if(st==='WAITING'){chips='<span class="chip">No data yet</span>';}
+    else if(!toks.length){chips='<span class="chip k">No faults</span>';}
+    else toks.forEach(function(k){var sensor=/SEN$|MPU/.test(k);chips+='<span class="chip '+(sensor?'w':(lv==='crit'?'c':'w'))+'">'+(FM[k]||k)+'</span>';});
+    $('#chips').innerHTML=chips;
+
+    var pill=$('#conn'),pt=$('#connT');
+    pill.className='pill '+(S.mode==='demo'?'demo':(S.esp?'on':(S.cloud===false||S.esp===false?'off':'')));
+    pt.textContent=S.mode==='demo'?'Demo data':(S.esp?'Online':(S.cloud===false?'No cloud':(S.esp===false?'Offline':'Connecting')));
+
+    if(S.mode==='demo'){$('#r-esp').textContent='Demo';$('#r-cloud').textContent='Demo';}
+    else{
+      $('#r-esp').textContent=S.esp==null?'Waiting':(S.esp?'Online':'Offline');
+      $('#r-cloud').textContent=S.cloud==null?'Waiting':(S.cloud?'Connected':'Unreachable');
+    }
+    $('#r-alert').textContent=st==='WAITING'?'None':(lv==='ok'?'None':st.charAt(0)+st.slice(1).toLowerCase());
+    $('#r-buzz').textContent=(st==='CRITICAL'||st==='TRIPPED')?'Continuous beeping':(st==='WARNING'?'Short beep every 2 s':'Silent');
+    $('#r-relay').textContent=st==='TRIPPED'?'Tripped, motor cut off':'Armed';
+    drawChart();
+  }
+
+  function push(){
+    HIST_ORDER.forEach(function(k){
+      if(S[k]!=null&&!isNaN(S[k])){H[k].push(S[k]);if(H[k].length>CAP)H[k].shift();}
+    });
+  }
+
+  function drawChart(){
+    var c=CH[curTab],a=H[curTab],W=640,Ht=240,L=48,R=12,T=14,B=28;
+    function X(i){return L+((i+CAP-a.length)/(CAP-1))*(W-L-R)}
+    function Y(v){return T+(1-(Math.min(c.max,Math.max(c.min,v))-c.min)/(c.max-c.min))*(Ht-T-B)}
+    var s='',k,v,y;
+    for(k=0;k<=4;k++){v=c.min+(c.max-c.min)*k/4;y=Y(v);s+='<line class="gl" x1="'+L+'" x2="'+(W-R)+'" y1="'+y.toFixed(1)+'" y2="'+y.toFixed(1)+'"/><text class="gt" x="'+(L-8)+'" y="'+(y+5).toFixed(1)+'" text-anchor="end">'+(+v.toFixed(2))+'</text>';}
+    c.lines.forEach(function(l){y=Y(l[0]);s+='<line class="th '+l[1]+'" x1="'+L+'" x2="'+(W-R)+'" y1="'+y.toFixed(1)+'" y2="'+y.toFixed(1)+'"/>';});
+    if(a.length>1){
+      var d='';a.forEach(function(val,i){d+=(i?'L':'M')+X(i).toFixed(1)+' '+Y(val).toFixed(1)+' ';});
+      s+='<path class="area" d="'+d+'L'+X(a.length-1).toFixed(1)+' '+(Ht-B)+' L'+X(0).toFixed(1)+' '+(Ht-B)+' Z"/><path class="ln" d="'+d+'"/><circle class="dot" cx="'+X(a.length-1).toFixed(1)+'" cy="'+Y(a[a.length-1]).toFixed(1)+'" r="5"/>';
+    }else{s+='<text class="gt" x="'+(W/2)+'" y="'+(Ht/2)+'" text-anchor="middle">Waiting for readings</text>';}
+    s+='<text class="gt" x="'+L+'" y="'+(Ht-6)+'">older</text><text class="gt" x="'+(W-R)+'" y="'+(Ht-6)+'" text-anchor="end">now</text>';
+    $('#chart').innerHTML=s;
+    $('#histCap').textContent=c.label+' ('+c.unit+') · last '+a.length+' readings'+(S.mode==='demo'?' · simulated':'');
+  }
+
+  function msg(t,err){var m=$('#msg');m.textContent=t||'';m.className='msg'+(err?' err':'');}
+
+  /* ---------- demo ---------- */
+  var TGT={normal:{temp:39,cur:1.8,volt:12.1,vib:0.12},warning:{temp:55,cur:5.4,volt:12.0,vib:0.35},critical:{temp:68,cur:6.4,volt:11.8,vib:0.72}};
+  function derive(){
+    var f=[],h=100,lvl=0;
+    [['temp','TEMP'],['cur','CURR'],['volt','VOLT'],['vib','VIB']].forEach(function(p){
+      var z=zoneOf(p[0],S[p[0]]);
+      if(z==='crit'){f.push(p[1]);h-=35;lvl=2;}else if(z==='warn'){f.push(p[1]);h-=15;lvl=Math.max(lvl,1);}
+    });
+    S.fault=f.join(' ');S.health=Math.max(0,h);S.status=lvl===2?'CRITICAL':lvl===1?'WARNING':'NORMAL';
+  }
+  function demoStep(){
+    var t=TGT[S.scn];
+    ['temp','cur','volt','vib'].forEach(function(k){
+      var cur=S[k]==null?t[k]:S[k];
+      var noise={temp:0.5,cur:0.15,volt:0.08,vib:0.03}[k];
+      S[k]=Math.max(0,cur+(t[k]-cur)*0.25+(Math.random()-0.5)*noise);
+    });
+    derive();push();
+  }
+  function startDemo(){
+    clearInterval(pollT);clearInterval(demoT);
+    S.mode='demo';S.cloud=null;S.esp=null;S.temp=S.cur=S.volt=S.vib=null;
+    H={temp:[],cur:[],volt:[],vib:[],health:[]};
+    var i;for(i=0;i<CAP;i++)demoStep();
+    $('#demoBtn').hidden=true;
+    $('#demoBar').querySelectorAll('[data-sc]').forEach(function(b){b.hidden=false;});
+    msg('Showing simulated readings. Paste a token to see your board.');
+    render();
+    demoT=setInterval(function(){demoStep();render();},2000);
+  }
+
+  /* ---------- live Blynk ---------- */
+  async function pollOnce(){
+    var base='https://'+S.srv,tk=encodeURIComponent(S.tok);
+    try{
+      var r=await fetch(base+'/external/api/get?token='+tk+'&v0&v1&v2&v3&v5&v6&v7',{cache:'no-store'});
+      S.cloud=true;
+      if(!r.ok){
+        msg(r.status===400?'Blynk did not accept this token. Check it and the server.':'Blynk answered with error '+r.status+'.',true);
+        S.status='WAITING';render();return;
+      }
+      var txt=await r.text(),o={};
+      try{o=JSON.parse(txt);}catch(e){}
+      var get=function(k){for(var key in o){if(key.toLowerCase()===k){var x=o[key];if(Array.isArray(x))x=x[0];return x;}}return undefined;};
+      var num=function(k){var x=get(k);if(x==null||x==='')return null;var n=parseFloat(x);return isNaN(n)?null:n;};
+      S.temp=num('v0');S.cur=num('v1');S.volt=num('v2');S.vib=num('v3');S.health=num('v7');
+      var st=get('v5'),fl=get('v6');
+      S.fault=fl==null?'':String(fl);
+      if(st!=null&&String(st)!=='')S.status=String(st).toUpperCase();
+      else{derive();}
+      if(S.health==null)derive();
+      var r2=await fetch(base+'/external/api/isHardwareConnected?token='+tk,{cache:'no-store'});
+      S.esp=r2.ok?((await r2.text()).trim()==='true'):null;
+      S.updated=new Date();
+      msg('Updated '+S.updated.toLocaleTimeString()+(S.esp?'':' · the board is offline, values are the last ones it sent'),!S.esp);
+      push();render();
+    }catch(e){
+      S.cloud=false;S.esp=null;
+      msg('Could not reach Blynk from here. Open this page from your own host, check the server choice and your connection.',true);
+      render();
+    }
+  }
+  function startLive(tok,srv){
+    clearInterval(demoT);clearInterval(pollT);
+    S.mode='live';S.tok=tok;S.srv=srv;S.cloud=null;S.esp=null;
+    S.temp=S.cur=S.volt=S.vib=S.health=null;S.status='WAITING';S.fault='';
+    H={temp:[],cur:[],volt:[],vib:[],health:[]};
+    try{sessionStorage.setItem('mh_tok',tok);sessionStorage.setItem('mh_srv',srv);}catch(e){}
+    $('#demoBar').querySelectorAll('[data-sc]').forEach(function(b){b.hidden=true;});
+    $('#demoBtn').hidden=false;
+    msg('Connecting…');render();
+    pollOnce();pollT=setInterval(pollOnce,5000);
+  }
+
+  /* ---------- events ---------- */
+  build();
+  $('#tabs').addEventListener('click',function(e){
+    var b=e.target.closest('[data-k]');if(!b)return;
+    curTab=b.getAttribute('data-k');
+    $('#tabs').querySelectorAll('.tab').forEach(function(t){t.setAttribute('aria-selected',String(t===b));});
+    drawChart();
+  });
+  $('#demoBar').addEventListener('click',function(e){
+    var b=e.target.closest('[data-sc]');if(!b)return;
+    S.scn=b.getAttribute('data-sc');
+    $('#demoBar').querySelectorAll('[data-sc]').forEach(function(x){x.setAttribute('aria-pressed',String(x===b));});
+  });
+  $('#go').addEventListener('click',function(){
+    var t=$('#tok').value.trim();
+    if(!t){msg('Paste your device auth token first.',true);return;}
+    startLive(t,$('#srv').value);
+  });
+  $('#tok').addEventListener('keydown',function(e){if(e.key==='Enter')$('#go').click();});
+  $('#demoBtn').addEventListener('click',startDemo);
+
+  var saved='',savedSrv='';
+  try{saved=sessionStorage.getItem('mh_tok')||'';savedSrv=sessionStorage.getItem('mh_srv')||'';}catch(e){}
+  if(saved){$('#tok').value=saved;if(savedSrv)$('#srv').value=savedSrv;startLive(saved,$('#srv').value);}
+  else startDemo();
+})();
+</script>
